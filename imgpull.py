@@ -1,7 +1,7 @@
+#!/usr/bin/env python
 #d3pp 7-23-19
 
-import os
-import sys
+import os, sys, threading
 from urllib.request import urlopen, urlretrieve, Request
 from bs4 import BeautifulSoup
 
@@ -18,21 +18,15 @@ def createDirs():
         except FileExistsError:
             print("Directory '"  + folderName +  "' already exists")
 
-
-def folderPrompt():
-    check = str(input("Would you like to put the images in a seperate folder? (Y/N): ")).lower().strip()
-    try:
-        if check[0] == 'y':
-            return True
-        elif check[0] == 'n':
-            return False
+def downloadImgs(startImg, endImg):
+    for i in range(startImg, endImg):
+        print("({}/{}): {}".format(i + 1, len(links), str(links[i][1])))
+        # make sure you even need the dang folder
+        if needFolder:
+            urlretrieve(links[i][0], 'images/' + folderName + '/' + links[i][1])
         else:
-            print('Invalid Input')
-            return folderPrompt()
-    except Exception as error:
-        print("Please enter valid inputs")
-        print(error)
-        return folderPrompt()
+            urlretrieve(links[i][0], 'images/' + links[i][1])
+
 
 sys.tracebacklimit = 0
 print("4chan.org Image scraper")
@@ -40,9 +34,12 @@ print("Made by d3pp\n")
 
 board = input("What board? ")
 threadnum = input("What is the thread number? ")
-needFolder = folderPrompt()
-if needFolder:
-    folderName = input("What do you want to name the folder? ")
+folderName = input("What do you want to name the folder?(Hit enter to skip) ")
+if folderName == "":
+    needFolder = False
+else:
+    needFolder = True
+
 
 
 # form the url the user requested
@@ -53,19 +50,25 @@ req = Request(url, headers={'User-Agent': 'Mozilla/5.0'})
 html = urlopen(req)
 soup = BeautifulSoup(html)
 
-createDirs()
-
 # find all html divisions with the class fileText and grab the image url from the href, then download the image to specified dir
 imgs = soup.findAll("div", {"class":"fileText"})
-# enumerate the list to have a jank progress indicator
-for c, img in enumerate(imgs):
-    link = img.a['href'].split("imgurl=")[0]
-    link = "http:" + link
+links = []
+for img in imgs:
+    link = "http:" + img.a['href'].split("imgurl=")[0]
+    print(link)
     name = img.a.string
-    # print the (number of image / total images): imagename.png
-    print("({}/{}): {}".format(c + 1, len(imgs), str(name)))
-    # make sure you even need the dang folder
-    if needFolder:
-        urlretrieve(link, 'images/' + folderName + '/' + name)
-    else:
-        urlretrieve(link, 'images/' + name)
+    both = [link, name]
+    links.append(both[:])
+
+
+createDirs()
+
+downloadThreads = []
+for i in range(0, len(links)):
+    downloadThread = threading.Thread(target=downloadImgs, args=(i, i+1))
+    downloadThreads.append(downloadThread)
+    downloadThread.start()
+
+for downloadThread in downloadThreads:
+    downloadThread.join()
+print('Done')
